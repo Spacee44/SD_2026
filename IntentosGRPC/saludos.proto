@@ -1,0 +1,15 @@
+syntax = "proto3";
+package Saludos;
+
+message peticion {
+    int32 peticion = 1;
+}
+
+message saludo {
+    string respuesta = 1;
+
+}
+
+service Saludos {
+    rpc Saludo (peticion) returns (saludo);
+}

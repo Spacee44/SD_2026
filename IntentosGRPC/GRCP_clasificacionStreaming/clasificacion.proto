@@ -1,0 +1,25 @@
+//El protocolo de GRCP clasifica el stremaing depende la direccion en la que fluyen los mensajes 
+//SeverStreaming - El cliente realiza una request al al servidor y recibe N respuestas de el servidor
+//ClientStreaming - En este caso el cliente realiza N peticiones a el servidor y el servidor manda solo una respuesra
+//Clsificacion Bidireccional, en este caso hay N request - Y N respuestas, ejemplo claro es un chat que es en vivo
+
+//Definicion de contrato, ejemplo real implementando cada una de las clasificacion
+
+syntax = "proto3";
+
+package clasificacion;
+
+message LogRequest {
+    string service_name = 1;
+    int32 limit = 2; // Se define como el numero de lineas log solicitadas
+}
+
+message LogResponse {
+    string log_line = 1;
+    string timestap = 2;
+}
+
+service LogService {
+    //Se define com un server streaming 1 peticion - Manda NRespuestas 
+    rpc Streamlog (LogRequest) returns (stream LogResponse);
+}

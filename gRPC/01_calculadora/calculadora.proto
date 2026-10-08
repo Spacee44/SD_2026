@@ -1,0 +1,26 @@
+// Contrato del servicio: define QUÉ funciones existen y QUÉ datos viajan.
+// A partir de este archivo se genera el código del cliente y del servidor.
+syntax = "proto3";
+
+package calculadora;
+
+// Mensaje que envía el cliente
+message Operandos {
+  double x = 1;  // El número es el "tag" del campo, no su valor
+  double y = 2;
+}
+
+// Mensaje que responde el servidor
+message Resultado {
+  double valor = 1;
+}
+
+// Servicio con llamadas unarias (1 petición -> 1 respuesta),
+// equivalente a lo que hicimos con XML-RPC
+service Calculadora {
+  rpc Suma (Operandos) returns (Resultado);
+  rpc Resta (Operandos) returns (Resultado);
+  rpc Multiplicacion (Operandos) returns (Resultado);
+  rpc Division (Operandos) returns (Resultado);
+  rpc Potencia (Operandos) returns (Resultado);
+}

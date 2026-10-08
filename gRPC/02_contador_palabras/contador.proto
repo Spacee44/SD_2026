@@ -1,0 +1,38 @@
+// Ejemplo con streaming: los mensajes fluyen como una secuencia
+syntax = "proto3";
+
+package contador;
+
+message Linea {
+  string texto = 1;
+}
+
+message Conteo {
+  int32 total_lineas = 1;
+  int32 total_palabras = 2;
+}
+
+message Peticion {
+  int32 top = 1;  // Cuántas palabras más frecuentes queremos
+}
+
+message Frecuencia {
+  string palabra = 1;
+  int32 veces = 2;
+}
+
+message Mensaje {
+  string usuario = 1;
+  string texto = 2;
+}
+
+service Contador {
+  // Client streaming: el cliente envía MUCHAS líneas, el servidor responde UNA vez
+  rpc EnviarTexto (stream Linea) returns (Conteo);
+
+  // Server streaming: el cliente pide UNA vez, el servidor responde con MUCHOS mensajes
+  rpc TopPalabras (Peticion) returns (stream Frecuencia);
+
+  // Bidireccional: ambos lados envían y reciben mensajes al mismo tiempo
+  rpc Eco (stream Mensaje) returns (stream Mensaje);
+}
