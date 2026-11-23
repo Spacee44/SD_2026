@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { USUARIO_ACTUAL_ID } from '../../lib/data';
-import { editarProducto, useHidratado, useStore } from '../../lib/store';
+import { editarProducto, useHidratado, useStore, useUsuarioActual } from '../../lib/store';
 import PhoneShell from '../ui/phoneShell';
 import TopBar from '../ui/topBar';
 import ProductForm from './productForm';
@@ -11,9 +10,10 @@ import ProductForm from './productForm';
 export default function EditProduct({ id }: { id: number }) {
   const router = useRouter();
   const hidratado = useHidratado();
+  const usuarioActual = useUsuarioActual();
   const { productos } = useStore();
   const producto = productos.find((p) => p.id === id);
-  const esMio = producto?.vendedorId === USUARIO_ACTUAL_ID;
+  const esMio = producto?.vendedorId === usuarioActual.id;
 
   return (
     <PhoneShell>

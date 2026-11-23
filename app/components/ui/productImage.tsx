@@ -17,7 +17,17 @@ export default function ProductImage({
   if (foto) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={foto} alt={producto.nombre} className="w-full h-full object-cover" />
+      <img
+        src={foto}
+        alt={producto.nombre}
+        className="w-full h-full object-cover"
+        loading="lazy"
+        onError={(e) => {
+          e.currentTarget.onerror = null;
+          e.currentTarget.src = ICONO_CATEGORIA[producto.categoria];
+          e.currentTarget.className = "w-auto h-auto max-w-[60%] max-h-[60%] object-contain m-auto";
+        }}
+      />
     );
   }
 

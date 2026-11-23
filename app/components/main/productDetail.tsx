@@ -4,13 +4,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { USUARIO_ACTUAL_ID, enlaceWhatsApp, type Producto, type Usuario } from '../../lib/data';
+import { enlaceWhatsApp, type Producto, type Usuario } from '../../lib/data';
 import {
   alternarFavorito,
   alternarVendido,
   eliminarProducto,
   useHidratado,
   useStore,
+  useUsuarioActual,
 } from '../../lib/store';
 import Avatar from '../ui/avatar';
 import ConfirmDialog from '../ui/confirmDialog';
@@ -45,7 +46,9 @@ export default function ProductDetail({ id }: { id: number }) {
 
   const vendedor = usuarios.find((u) => u.id === producto.vendedorId);
 
-  if (producto.vendedorId === USUARIO_ACTUAL_ID) {
+  const usuarioActual = useUsuarioActual();
+
+  if (producto.vendedorId === usuarioActual.id) {
     return <VistaDueno producto={producto} vendedor={vendedor} />;
   }
 

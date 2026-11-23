@@ -2,9 +2,10 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
-import { USUARIO_ACTUAL_ID, enlaceWhatsApp, type Producto } from '../../lib/data';
-import { eliminarProducto, useHidratado, useStore } from '../../lib/store';
+import { enlaceWhatsApp, type Producto } from '../../lib/data';
+import { cerrarSesion, eliminarProducto, useHidratado, useStore, useUsuarioActual } from '../../lib/store';
 import Avatar from '../ui/avatar';
 import BottomNav from '../ui/bottomNav';
 import ConfirmDialog from '../ui/confirmDialog';
@@ -17,12 +18,14 @@ import TopBar from '../ui/topBar';
  * (con editar/eliminar publicaciones); si no, el perfil público con "Contactar".
  */
 export default function ProfileView({ usuarioId }: { usuarioId: string }) {
+  const router = useRouter();
   const { usuarios, productos } = useStore();
+  const usuarioActual = useUsuarioActual();
   const hidratado = useHidratado();
   const [porEliminar, setPorEliminar] = useState<Producto | null>(null);
   const cerrarDialogo = useCallback(() => setPorEliminar(null), []);
 
-  const esPropio = usuarioId === USUARIO_ACTUAL_ID;
+  const esPropio = usuarioId === usuarioActual.id;
   const usuario = usuarios.find((u) => u.id === usuarioId);
 
   if (!usuario) {
@@ -85,7 +88,7 @@ export default function ProfileView({ usuarioId }: { usuarioId: string }) {
             </div>
           </dl>
 
-          {!esPropio && (
+          {!esPropio ? (
             <a
               href={enlaceWhatsApp(
                 usuario.telefono,
@@ -98,6 +101,17 @@ export default function ProfileView({ usuarioId }: { usuarioId: string }) {
               <Image src="/icons/whatsapp.png" alt="" width={27} height={27} />
               Contactar
             </a>
+          ) : (
+            <button
+              type="button"
+              onClick={async () => {
+                await cerrarSesion();
+                router.push('/');
+              }}
+              className="mt-4 px-6 py-2 rounded-full border border-fif-navy/30 text-fif-navy text-sm font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors"
+            >
+              Cerrar sesión
+            </button>
           )}
         </section>
 

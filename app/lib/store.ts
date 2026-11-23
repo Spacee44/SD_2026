@@ -1,9 +1,6 @@
 'use client';
 
-// Estado del lado del cliente (productos, favoritos, usuarios) guardado en
-// localStorage. Es un sustituto temporal de la API / base de datos: cuando
-// exista un backend, basta con reemplazar las acciones de este archivo.
-
+// Estado global del cliente sincronizado con la Base de Datos SQLite y API REST.
 import { useSyncExternalStore } from 'react';
 import {
   FAVORITOS_INICIALES,
@@ -18,14 +15,16 @@ type Estado = {
   productos: Producto[];
   usuarios: Usuario[];
   favoritos: number[];
+  usuarioActualId: string;
 };
 
-const CLAVE = 'fif-store-v1';
+const CLAVE = 'fif-store-v2';
 
 const ESTADO_INICIAL: Estado = {
   productos: PRODUCTOS_INICIALES,
   usuarios: USUARIOS_INICIALES,
   favoritos: FAVORITOS_INICIALES,
+  usuarioActualId: USUARIO_ACTUAL_ID,
 };
 
 let estado: Estado = ESTADO_INICIAL;
@@ -35,11 +34,63 @@ const oyentes = new Set<() => void>();
 function cargar() {
   if (cargado || typeof window === 'undefined') return;
   cargado = true;
+
   try {
     const guardado = window.localStorage.getItem(CLAVE);
-    if (guardado) estado = { ...ESTADO_INICIAL, ...JSON.parse(guardado) };
+    if (guardado) {
+      const parsed = JSON.parse(guardado);
+      estado = {
+        ...ESTADO_INICIAL,
+        ...parsed,
+        // Si no tiene los 100 productos en caché viejo, asegurar los iniciales
+        productos: parsed.productos && parsed.productos.length >= 100 ? parsed.productos : PRODUCTOS_INICIALES,
+      };
+    }
   } catch {
-    // Almacenamiento no disponible o datos corruptos: usamos los iniciales.
+    // Almacenamiento no disponible o datos corruptos
+  }
+
+  // Sincronizar asíncronamente con el backend SQLite
+  sincronizarConBackend();
+}
+
+async function sincronizarConBackend() {
+  try {
+    const [resMe, resProd, resFav] = await Promise.all([
+      fetch('/api/auth/me').catch(() => null),
+      fetch('/api/productos').catch(() => null),
+      fetch('/api/favoritos').catch(() => null),
+    ]);
+
+    let nuevoEstado = { ...estado };
+
+    if (resMe && resMe.ok) {
+      const dataMe = await resMe.json();
+      if (dataMe.user) {
+        nuevoEstado.usuarioActualId = dataMe.user.id;
+      }
+      if (dataMe.usuarios && dataMe.usuarios.length > 0) {
+        nuevoEstado.usuarios = dataMe.usuarios;
+      }
+    }
+
+    if (resProd && resProd.ok) {
+      const dataProd = await resProd.json();
+      if (dataProd.productos && dataProd.productos.length > 0) {
+        nuevoEstado.productos = dataProd.productos;
+      }
+    }
+
+    if (resFav && resFav.ok) {
+      const dataFav = await resFav.json();
+      if (Array.isArray(dataFav.favoritos)) {
+        nuevoEstado.favoritos = dataFav.favoritos;
+      }
+    }
+
+    actualizar(() => nuevoEstado);
+  } catch (err) {
+    console.error('Error sincronizando con backend:', err);
   }
 }
 
@@ -47,7 +98,7 @@ function guardar() {
   try {
     window.localStorage.setItem(CLAVE, JSON.stringify(estado));
   } catch {
-    // Sin espacio (p. ej. demasiadas fotos) o almacenamiento bloqueado.
+    // Espacio limitado o bloqueado
   }
 }
 
@@ -81,17 +132,50 @@ export function useStore(): Estado {
 
 const noop = () => () => {};
 
-/** `true` una vez que el cliente ya leyó localStorage. */
+/** `true` una vez que el cliente ya leyó datos en el navegador. */
 export function useHidratado(): boolean {
   return useSyncExternalStore(noop, () => true, () => false);
 }
 
 export function useUsuarioActual(): Usuario {
-  const { usuarios } = useStore();
-  return usuarios.find((u) => u.id === USUARIO_ACTUAL_ID) ?? USUARIOS_INICIALES[0];
+  const { usuarios, usuarioActualId } = useStore();
+  return (
+    usuarios.find((u) => u.id === usuarioActualId) ??
+    usuarios.find((u) => u.id === USUARIO_ACTUAL_ID) ??
+    USUARIOS_INICIALES[0]
+  );
 }
 
-// ----- Acciones -----
+// ----- Acciones de Autenticación -----
+
+export function loginUsuario(usuario: Usuario) {
+  actualizar((e) => {
+    const existe = e.usuarios.some((u) => u.id === usuario.id);
+    const listaUsuarios = existe
+      ? e.usuarios.map((u) => (u.id === usuario.id ? usuario : u))
+      : [...e.usuarios, usuario];
+
+    return {
+      ...e,
+      usuarioActualId: usuario.id,
+      usuarios: listaUsuarios,
+    };
+  });
+}
+
+export async function cerrarSesion() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (e) {
+    console.error('Error al cerrar sesión:', e);
+  }
+  actualizar((e) => ({
+    ...e,
+    usuarioActualId: USUARIO_ACTUAL_ID,
+  }));
+}
+
+// ----- Acciones de Productos -----
 
 export type DatosProducto = Pick<
   Producto,
@@ -101,16 +185,23 @@ export type DatosProducto = Pick<
 export function crearProducto(datos: DatosProducto): number {
   let nuevoId = 0;
   actualizar((e) => {
-    // Basado en la hora para no reutilizar ids de publicaciones borradas.
     nuevoId = Math.max(Date.now(), ...e.productos.map((p) => p.id + 1));
     const nuevo: Producto = {
       ...datos,
       id: nuevoId,
-      vendedorId: USUARIO_ACTUAL_ID,
+      vendedorId: e.usuarioActualId,
       vendido: false,
     };
     return { ...e, productos: [nuevo, ...e.productos] };
   });
+
+  // Guardar en la base de datos SQLite vía API
+  fetch('/api/productos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  }).catch(console.error);
+
   return nuevoId;
 }
 
@@ -119,15 +210,32 @@ export function editarProducto(id: number, datos: DatosProducto) {
     ...e,
     productos: e.productos.map((p) => (p.id === id ? { ...p, ...datos } : p)),
   }));
+
+  fetch(`/api/productos/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  }).catch(console.error);
 }
 
 export function alternarVendido(id: number) {
-  actualizar((e) => ({
-    ...e,
-    productos: e.productos.map((p) =>
-      p.id === id ? { ...p, vendido: !p.vendido } : p,
-    ),
-  }));
+  let nuevoEstado = false;
+  actualizar((e) => {
+    const prod = e.productos.find((p) => p.id === id);
+    if (prod) nuevoEstado = !prod.vendido;
+    return {
+      ...e,
+      productos: e.productos.map((p) =>
+        p.id === id ? { ...p, vendido: !p.vendido } : p,
+      ),
+    };
+  });
+
+  fetch(`/api/productos/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vendido: nuevoEstado }),
+  }).catch(console.error);
 }
 
 export function eliminarProducto(id: number) {
@@ -136,6 +244,10 @@ export function eliminarProducto(id: number) {
     productos: e.productos.filter((p) => p.id !== id),
     favoritos: e.favoritos.filter((f) => f !== id),
   }));
+
+  fetch(`/api/productos/${id}`, {
+    method: 'DELETE',
+  }).catch(console.error);
 }
 
 export function alternarFavorito(id: number) {
@@ -145,6 +257,12 @@ export function alternarFavorito(id: number) {
       ? e.favoritos.filter((f) => f !== id)
       : [...e.favoritos, id],
   }));
+
+  fetch('/api/favoritos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productoId: id }),
+  }).catch(console.error);
 }
 
 export function actualizarUsuarioActual(
@@ -153,7 +271,7 @@ export function actualizarUsuarioActual(
   actualizar((e) => ({
     ...e,
     usuarios: e.usuarios.map((u) =>
-      u.id === USUARIO_ACTUAL_ID ? { ...u, ...datos } : u,
+      u.id === e.usuarioActualId ? { ...u, ...datos } : u,
     ),
   }));
 }

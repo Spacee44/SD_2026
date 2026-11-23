@@ -1,6 +1,9 @@
+'use client';
+
 import ProfileView from '../components/profile/profileView';
-import { USUARIO_ACTUAL_ID } from '../lib/data';
+import { useUsuarioActual } from '../lib/store';
 
 export default function PerfilPage() {
-  return <ProfileView usuarioId={USUARIO_ACTUAL_ID} />;
+  const usuario = useUsuarioActual();
+  return <ProfileView usuarioId={usuario.id} />;
 }
